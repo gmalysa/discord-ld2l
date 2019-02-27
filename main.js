@@ -43,7 +43,7 @@ clients.discord.on('message', function(message) {
 	});
 
 	var command = env.words[0];
-	var cmd = commands[command];
+	var cmd = commands[command.toLowerCase()];
 	if (undefined !== cmd) {
 		cmd.call(null, env, function() {});
 	}
