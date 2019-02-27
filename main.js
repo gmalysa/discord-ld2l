@@ -1,14 +1,18 @@
 
-const config = require('./config.js');
-const logger = require('./logger.js');
 const _ = require('underscore');
-const fl = require('flux-link');
-const request = require('request');
-const sprintf = require('sprintf-js').sprintf;
-const dotaconstants = require('dotaconstants');
-
+const config = require('./config.js');
 const Discord = require('discord.js');
-var client = new Discord.Client();
+const dotaconstants = require('dotaconstants');
+const fl = require('flux-link');
+const logger = require('./logger.js');
+const request = require('request');
+const redis = require('redis');
+const sprintf = require('sprintf-js').sprintf;
+
+const steamAPI = require('./lib/steam.js');
+
+var discordClient = new Discord.Client();
+var redisClient = redis.createClient();
 
 // List of things that can start commands
 const command_prefixes = ['--', '—', '––', '——'];
@@ -67,10 +71,17 @@ function translateLobbyType(lobby) {
 }
 
 /**
+ * Escape some characters from account names that will mess up our formatting
+ */
+function discordEscape(name) {
+	return name.replace(/[*\`_]/g, '\\$&');
+}
+
+/**
  * Format a set of player entries from a GetMatchDetails request into the table form
  * that is used within the result summary
  */
-function makePlayerTable(players) {
+function makePlayerTable(players, names) {
 	var rows = [
 		sprintf('`%3s %-15s %3s/%3s/%3s %4s/%2s %6s %5s %4s %4s`',
 				'', 'Hero', 'K', 'D', 'A', 'LH', 'DN', 'HD', 'TD', 'GPM', 'XPM')
@@ -90,14 +101,69 @@ function makePlayerTable(players) {
 			p.tower_damage/1000,
 			p.gold_per_min,
 			p.xp_per_min,
-			p.account_id
+			discordEscape(names[p.account_id])
 		);
 	});
 
-	var table = rows.concat(players).join("\n").replace(' ', " \u200b\ufeff");
-	logger.debug(table);
-	return table;
+	return rows.concat(players).join("\n");
 }
+
+/**
+ * Convert account IDs into user names (no registered accounts yet)
+ */
+var getNamesForAccounts = new fl.Chain(
+	function(env, after, ids) {
+		env.ids = ids;
+		redisClient.mget(ids.map(id => 'steam_name_'+id), env.$check(after));
+	},
+	function(env, after, response) {
+		var result = _.object(_.zip(env.ids, response));
+		env.result = result;
+
+		var missing = [];
+		_.each(result, function(v, k) {
+			if (null == v) {
+				result[k] = 'Unknown';
+				missing.push(k);
+			}
+		});
+
+		env.missing = missing;
+		after();
+	},
+	new fl.Branch(
+		function(env, after) {
+			after(env.missing.length > 0);
+		},
+		new fl.Chain(
+			function(env, after) {
+				after(env.missing);
+			},
+			steamAPI.getNamesForAccounts
+		),
+		function(env, after) {
+			after([]);
+		}
+	),
+	function(env, after, found) {
+		_.each(found, function(p, id) {
+			env.result[id] = p;
+		});
+
+		var keys = _.keys(env.result).map(v => 'steam_name_'+v);
+		var values = _.values(env.result);
+		env.redis_keys = keys;
+		redisClient.mset(_.flatten(_.zip(keys, values)), env.$check(after));
+	},
+	function(env, after) {
+		var cmd = redisClient.multi();
+		env.redis_keys.forEach(function(v) {
+			cmd.expire(v, 24*3600);
+		});
+		cmd.exec(); // ignore result
+		after(env.result);
+	}
+).use_local_env(true);
 
 /**
  * Gets match details from dota api
@@ -110,13 +176,15 @@ var getMatchDetails = new fl.Chain(
 			env.$check(after));
 	},
 	function(env, after, response, body) {
-		// @todo resolve account id to names using cached lists, etc.
-		var match = JSON.parse(body);
-		logger.var_dump(match);
+		env.match = JSON.parse(body);
+		var players = env.match.result.players.map(p => p.account_id);
 
-		after(match.result);
+		after(players);
 	},
-	function(env, after, result) {
+	getNamesForAccounts,
+	function(env, after, players) {
+		var result = env.match.result;
+
 		var radEmote = env.message.guild.emojis.find(e => e.name == "radiant") || '';
 		var direEmote = env.message.guild.emojis.find(e => e.name == "dire") || '';
 
@@ -144,12 +212,9 @@ var getMatchDetails = new fl.Chain(
 			(new Date(result.start_time*1000)).toDateString()
 		);
 
-		// @todo this requires either OD or multiple requests or a caching scheme
-		// because skill was removed from the dota API response, so just show a
-		// title for now, for the links to od/db/stratz
 		var links = sprintf(
-			'<https://www.opendota.com/matches/%d> / ' +
-			'<https://www.dotabuff.com/matches/%d>',
+			'OD: <https://www.opendota.com/matches/%d>\n' +
+			'DB: <https://www.dotabuff.com/matches/%d>',
 			result.match_id,
 			result.match_id,
 		);
@@ -157,9 +222,9 @@ var getMatchDetails = new fl.Chain(
 		var text = [
 			details,
 			'**Radiant**',
-			makePlayerTable(result.players.slice(0, 5)),
+			makePlayerTable(result.players.slice(0, 5), players),
 			'**Dire**',
-			makePlayerTable(result.players.slice(5)),
+			makePlayerTable(result.players.slice(5), players),
 			links
 		];
 		env.message.channel.send(text.join("\n"));
@@ -193,12 +258,12 @@ var commands = {
 };
 
 // Maybe do something better about these in the future
-client.on('error', function(err) {
-	logger.var_dump(err);
+discordClient.on('error', function(err) {
+	logger.var_dump(err, 'discord');
 });
 
 // Check if the message is for us and then pass to command handlers
-client.on('message', function(message) {
+discordClient.on('message', function(message) {
 	if (!message.guild)
 		return;
 
@@ -217,8 +282,6 @@ client.on('message', function(message) {
 		logger.debug(err, 'Command');
 	});
 
-	logger.var_dump(env.words);
-
 	var command = env.words[0];
 	var cmd = commands[command];
 	if (undefined !== cmd) {
@@ -226,4 +289,8 @@ client.on('message', function(message) {
 	}
 });
 
-client.login(config.discord_token);
+redisClient.on('error', function(err) {
+	logger.var_dump(err, 'redis');
+});
+
+discordClient.login(config.discord_token);
