@@ -15,29 +15,16 @@ const util = require('../util.js');
  */
 var ability = new fl.Chain(
 	function(env, after) {
-		var testName = env.words.slice(1).join(' ');
-
-		// Look for cheap matches first
-		var matches = _.filter(dotaconstants.abilities, function(ability) {
-			// Handle malformed abilities
-			if (undefined === ability.dname)
-				return false;
-
-			var lc = ability.dname.toLowerCase();
-			if (lc.includes(testName.toLowerCase()))
-				return true;
-		});
-
-		// Search for a more expensive match if we didn't find anything
-		if (matches.length == 0) {
-			// @todo use string-similarity, not needed for initial embed design
-		}
-
+		env.testName = env.words.slice(1).join(' ');
+		after(env.testName);
+	},
+	util.dotaMatchBuilder(dotaconstants.abilities),
+	function(env, after, matches) {
 		// No match, report error
 		if (matches.length == 0) {
 			var message = sprintf(
 				'Couldn\'t find an ability matching `%s`',
-				util.discordEscape(testName)
+				util.discordEscape(env.testName)
 			);
 			env.message.channel.send(message);
 			after();
