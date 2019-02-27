@@ -39,10 +39,12 @@ var item = new fl.Chain(
 		var item = matches[0];
 
 		// Normal description at the top
-		var description = [
-			'*'+item.lore+'*',
-			''
-		];
+		var description = [];
+
+		if (item.lore) {
+			description.push('*'+item.lore+'*');
+			description.push('');
+		}
 
 		if (item.active) {
 			item.active.forEach(function(active) {
@@ -64,6 +66,16 @@ var item = new fl.Chain(
 			});
 		}
 
+		if (item.use) {
+			item.use.forEach(function(use) {
+				description.push(sprintf(
+					'**%s**: %s',
+					use.name,
+					use.desc
+				));
+			});
+		}
+
 		description.push(item.desc);
 
 		// Stats go into one field
@@ -81,12 +93,22 @@ var item = new fl.Chain(
 		}
 
 		item.attrib.forEach(function(attr) {
-			stats.push(sprintf(
-				'%s%s %s',
-				attr.header,
-				util.joinMaybeList(attr.value),
-				attr.footer
-			));
+			// Footer is empty sometimes because they are inconsistent
+			if (attr.footer) {
+				stats.push(sprintf(
+					'%s%s %s',
+					attr.header,
+					util.joinMaybeList(attr.value),
+					attr.footer
+				));
+			}
+			else {
+				stats.push(sprintf(
+					'%s %s',
+					attr.header,
+					util.joinMaybeList(attr.value)
+				));
+			}
 		});
 
 		var embed = new Discord.RichEmbed()
