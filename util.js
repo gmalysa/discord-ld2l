@@ -8,5 +8,14 @@ module.exports = {
 	 */
 	discordEscape : function(name) {
 		return name.replace(/[*\`_]/g, '\\$&');
+	},
+
+	/**
+	 * Merge a maybe list or a single value into a string
+	 */
+	joinMaybeList : function(list, join) {
+		if (Array.isArray(list))
+			return list.join(join);
+		return list;
 	}
 };
