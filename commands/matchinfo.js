@@ -8,6 +8,7 @@ const fl = require('flux-link');
 const logger = require('../logger.js');
 const sprintf = require('sprintf-js').sprintf;
 const steamAPI = require('../lib/steam.js');
+const util = require('../util.js');
 
 // List of game mode -> english string (dotaconstants provides only internal names)
 // For simplicity only ones I care about have been added (complain to add more)
@@ -63,13 +64,6 @@ function translateLobbyType(lobby) {
 }
 
 /**
- * Escape some characters from account names that will mess up our formatting
- */
-function discordEscape(name) {
-	return name.replace(/[*\`_]/g, '\\$&');
-}
-
-/**
  * Format a set of player entries from a GetMatchDetails request into the table form
  * that is used within the result summary
  */
@@ -93,7 +87,7 @@ function makePlayerTable(players, names) {
 			p.tower_damage/1000,
 			p.gold_per_min,
 			p.xp_per_min,
-			discordEscape(names[p.account_id])
+			util.discordEscape(names[p.account_id])
 		);
 	});
 
