@@ -3,11 +3,9 @@
  */
 
 const _ = require('underscore');
-const config = require('../config.js');
 const dotaconstants = require('dotaconstants');
 const fl = require('flux-link');
 const logger = require('../logger.js');
-const request = require('request');
 const sprintf = require('sprintf-js').sprintf;
 const steamAPI = require('../lib/steam.js');
 
@@ -77,13 +75,13 @@ function discordEscape(name) {
  */
 function makePlayerTable(players, names) {
 	var rows = [
-		sprintf('`%3s %-15s %3s/%3s/%3s %4s/%2s %6s %5s %4s %4s`',
-				'', 'Hero', 'K', 'D', 'A', 'LH', 'DN', 'HD', 'TD', 'GPM', 'XPM')
+		sprintf('`%-3s %-15s %3s/%3s/%3s %4s/%2s %6s %5s %4s %4s`',
+				'L.', 'Hero', 'K', 'D', 'A', 'LH', 'DN', 'HD', 'TD', 'GPM', 'XPM')
 	];
 
 	players = players.map(function(p) {
 		return sprintf(
-			'`%3d %-15s %3d/%3d/%3d %4d/%2d %5.1fk %4.1fk %4d %4d` %s',
+			'`%-3d %-15s %3d/%3d/%3d %4d/%2d %5.1fk %4.1fk %4d %4d` %s',
 			p.level,
 			dotaconstants.heroes[p.hero_id+''].localized_name.substr(0,15),
 			p.kills,
@@ -111,34 +109,19 @@ var getNamesForAccounts = new fl.Chain(
 		env.clients.redis.mget(ids.map(id => 'steam_name_'+id), env.$check(after));
 	},
 	function(env, after, response) {
-		var result = _.object(_.zip(env.ids, response));
-		env.result = result;
+		env.result = _.object(_.zip(env.ids, response));
 
 		var missing = [];
-		_.each(result, function(v, k) {
+		_.each(env.result, function(v, k) {
 			if (null == v) {
-				result[k] = 'Unknown';
+				env.result[k] = 'Unknown';
 				missing.push(k);
 			}
 		});
 
-		env.missing = missing;
-		after();
+		after(missing);
 	},
-	new fl.Branch(
-		function(env, after) {
-			after(env.missing.length > 0);
-		},
-		new fl.Chain(
-			function(env, after) {
-				after(env.missing);
-			},
-			steamAPI.getNamesForAccounts
-		),
-		function(env, after) {
-			after([]);
-		}
-	),
+	steamAPI.getNamesForAccounts,
 	function(env, after, found) {
 		_.each(found, function(p, id) {
 			env.result[id] = p;
@@ -161,16 +144,12 @@ var getNamesForAccounts = new fl.Chain(
 
 /**
  * Gets match details from dota api
+ * @param[in] id match id is required for steam.getMatchDetails
  */
 var getMatchDetails = new fl.Chain(
-	function(env, after, id) {
-		request('http://api.steampowered.com/IDOTA2Match_570/GetMatchDetails/v1' +
-			'?key=' + config.steam_api_key +
-			'&match_id= ' +id,
-			env.$check(after));
-	},
-	function(env, after, response, body) {
-		env.match = JSON.parse(body);
+	steamAPI.getMatchDetails,
+	function(env, after, match) {
+		env.match = match;
 		var players = env.match.result.players.map(p => p.account_id);
 
 		after(players);
