@@ -53,21 +53,10 @@ const ability_map = ['Q', 'W', 'E', 'D', 'F', 'R'];
 var hero = new fl.Chain(
 	function(env, after) {
 		env.testName = env.words.slice(1).join(' ');
-		var testLC = env.testName.toLowerCase();
-		var testLCinternal = testLC.replace(' ', '_');
-
-		var matches = _.filter(dotaconstants.heroes, function(hero) {
-			if (hero.localized_name.includes(testLC))
-				return true;
-
-			if (hero.name.includes(testLCinternal))
-				return true;
-
-			return false;
-		});
-
-		// @todo use string-similarity for a fallback match
-
+		after(env.testName);
+	},
+	util.dotaHeroSearch,
+	function(env, after, matches) {
 		if (matches.length == 0) {
 			var message = sprintf(
 				'Couldn\'t find a hero matching `%s`',

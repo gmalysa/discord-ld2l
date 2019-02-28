@@ -3,6 +3,7 @@
  */
 
 const _ = require('underscore');
+const dotaconstants = require('dotaconstants');
 const fl = require('flux-link');
 
 module.exports = {
@@ -49,5 +50,29 @@ module.exports = {
 				after(matches);
 			}
 		);
-	}
+	},
+
+	/**
+	 * Find a hero match by name
+	 */
+	dotaHeroSearch : new fl.Chain(
+		function(env, after, testName) {
+			var testLC = testName.toLowerCase();
+			var testLCinternal = testLC.replace(' ', '_');
+
+			var matches = _.filter(dotaconstants.heroes, function(hero) {
+				if (hero.localized_name.toLowerCase().includes(testLC))
+					return true;
+
+				if (hero.name.includes(testLCinternal))
+					return true;
+
+				return false;
+			});
+
+			// @todo use string-similarity for a fallback match
+
+			after(matches);
+		}
+	),
 };
