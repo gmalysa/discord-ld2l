@@ -48,6 +48,66 @@ function getHeroDamage(hero) {
 const ability_map = ['Q', 'W', 'E', 'D', 'F', 'R'];
 
 /**
+ * Format a typical ability, this procedure is designed for use with map over
+ * the abilities array or a portion of the abilities array
+ */
+function formatAbility(ability, index) {
+	if ('generic_hidden' != ability) {
+		return sprintf(
+			'**%s** - %s',
+			ability_map[index],
+			dotaconstants.abilities[ability].dname
+		);
+	}
+	else {
+		return '';
+	}
+}
+
+/**
+ * Get the list of abilities with hotkey mappings for a specific hero, and include
+ * special handling for heroes that do not work with the way data is specified in
+ * dotaconstants
+ * @param[in] hero object from heroes.json
+ */
+function getHeroAbilities(hero) {
+	var abilities = [];
+	var hero_abilities = dotaconstants.hero_abilities[hero.name];
+
+	switch (hero.name) {
+		case 'npc_dota_hero_invoker':
+			abilities = abilities.concat([
+				'**Q** - ' + dotaconstants.abilities['invoker_quas'].dname,
+				'**W** - ' + dotaconstants.abilities['invoker_wex'].dname,
+				'**E** - ' + dotaconstants.abilities['invoker_exort'].dname,
+				'**R** - ' + dotaconstants.abilities['invoker_invoke'].dname
+			]);
+
+			abilities.push('Invoked Spells:');
+
+			// 6-8 and talents 0-6 are real spells
+			abilities = abilities.concat(hero_abilities.abilities.slice(6).map(function (a) {
+				return '- ' + dotaconstants.abilities[a].dname;
+			}));
+
+			abilities = abilities.concat(hero_abilities.talents.slice(0, 7).map(function (a) {
+				return '- ' + dotaconstants.abilities[a.name].dname;
+			}));
+			break;
+
+		case 'npc_dota_hero_monkey_king':
+			abilities = abilities.concat(hero_abilities.abilities.slice(0, 6).map(formatAbility));
+			break;
+
+		default:
+			abilities = abilities.concat(hero_abilities.abilities.map(formatAbility));
+			break;
+	}
+
+	return _.without(abilities, '');
+}
+
+/**
  * Look up a hero, format a message explaining it, and send it back
  */
 var hero = new fl.Chain(
@@ -89,20 +149,7 @@ var hero = new fl.Chain(
 			attributes.push(sprintf('Attack Range: %d', hero.attack_range));
 
 		var roles = hero.roles.join(', ');
-
-		var ability_names = dotaconstants.hero_abilities[hero.name].abilities;
-		var abilities = ability_names.map(function(ability, id) {
-			if ('generic_hidden' != ability) {
-				return sprintf(
-					'**%s** - %s',
-					ability_map[id],
-					dotaconstants.abilities[ability].dname
-				);
-			}
-			return '';
-		});
-
-		abilities = _.without(abilities, '');
+		var abilities = getHeroAbilities(hero);
 
 		var embed = new Discord.RichEmbed()
 			.setTitle(hero.localized_name)
