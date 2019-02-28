@@ -39,12 +39,12 @@ var ability = new fl.Chain(
 			'',
 		];
 
-		if (ability.mc) {
+		if (ability.mc instanceof Array || ability.mc > 0) {
 			// @todo use mana cost emote
 			description.push('Mana: ' + util.joinMaybeList(ability.mc, '/'));
 		}
 
-		if (ability.cd) {
+		if (ability.cd instanceof Array || ability.cd > 0) {
 			description.push('Cooldown: ' + util.joinMaybeList(ability.cd, '/'));
 		}
 
