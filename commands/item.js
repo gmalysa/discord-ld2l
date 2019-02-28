@@ -134,6 +134,7 @@ var item = new fl.Chain(
 			embed.addField('Notes', item.notes);
 
 		env.message.channel.send(embed);
+		after();
 	}
 ).use_local_env(true);
 

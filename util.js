@@ -37,6 +37,8 @@ module.exports = {
 					var lc = entry.dname.toLowerCase();
 					if (lc.includes(testName.toLowerCase()))
 						return true;
+
+					return false;
 				});
 
 				// Search for a more expensive match if we didn't find anything
