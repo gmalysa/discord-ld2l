@@ -15,6 +15,7 @@
     "db-migrate": "^0.10.0-beta.24",
     "db-migrate-mysql": "^1.1.10",
     "discord.js": "^11.4.2",
+    "dota2": "^6.2.0",
     "dotaconstants": "^6.12.0",
     "flux-link": "github:gmalysa/flux-link",
     "mysql": "2.15.0",
@@ -23,6 +24,7 @@
     "request": "^2.83.0",
     "sprintf-js": "^1.1.2",
     "spyglass": "*",
+    "steam": "^1.4.0",
     "underscore": "*"
   },
   "devDependencies": {

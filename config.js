@@ -16,7 +16,9 @@ var defaults = {
 
 	// Steam and Dota settings
 	steam_api_key : '',
-	// @todo add dota options here, likely a steam name/pw
+	steam_user : '',
+	steam_pass : '',
+	steam_server_list : 'steam-servers.json',
 
 	// Discord application settings
 	discord_client_id : '',
