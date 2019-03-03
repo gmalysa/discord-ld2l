@@ -15,7 +15,7 @@
     "db-migrate": "^0.10.0-beta.24",
     "db-migrate-mysql": "^1.1.10",
     "discord.js": "^11.4.2",
-    "dota2": "^6.2.0",
+    "dota2": "github:Arcana/node-dota2",
     "dotaconstants": "^6.12.0",
     "flux-link": "github:gmalysa/flux-link",
     "mysql": "2.15.0",
