@@ -133,19 +133,17 @@ setInterval(function() {
  */
 var getDotaProfile = new fl.Chain(
 	function(env, after, id) {
-		env.accountId = id;
+		env.accountId = parseInt(id);
+		logger.debug('Requesting profile for '+id);
 		redisClients.pub.hincrby('stats', 'dota_request_profile', 1);
-		logger.debug('requestProfile()');
 		dotaClient.requestProfile(env.accountId, env.$check(after));
 	},
 	function(env, after, profile) {
 		env.profile = sanitize(profile);
-		logger.debug('requestProfileCard()');
 		dotaClient.requestProfileCard(env.accountId, env.$check(after));
 	},
 	function(env, after, profileCard) {
 		env.profileCard = sanitize(profileCard);
-		logger.debug('requestPlayerStats()');
 		dotaClient.requestPlayerStats(env.accountId, env.$check(after));
 	},
 	function(env, after, playerStats) {
@@ -168,69 +166,110 @@ var getDotaProfile = new fl.Chain(
 var publishDotaProfile = new fl.Chain(
 	function(env, after, profile) {
 		env.profile = profile;
-		logger.debug('saving profile to redis');
-		logger.var_dump(profile);
-		redisClients.pub.set(
-			'dota_profile_' + profile.account_id,
-			JSON.stringify(profile),
-			env.$check(after)
-		);
+		redisClients.pub.multi()
+			.set(
+				'dota_profile_' + profile.account_id,
+				JSON.stringify(profile)
+			)
+			.expire('dota_profile_' + profile.account_id, 24*3600)
+			.exec(env.$check(after));
 	},
 	function(env, after) {
-		logger.debug('publishing new profile to redis');
 		redisClients.pub.publish('dota:profile', env.profile.account_id);
 		after();
 	}
 ).use_local_env(true);
 
 /**
- * Fetch the next dota profile id from redis
- * @return true if a new profile was found (at next location on stack)
+ * Create a handler that works by popping a single value from a command queue in
+ * redis and also re-calling itself if the queue is not empty after it finishes
+ * @param[in] fn The function to call with the queue data
+ * @return env.rerun set to true if the queue requires multiple calls
  */
-var fetchProfileId = new fl.Chain(
-	function(env, after) {
-		redisClients.pub.rpop('dota_cmds_get_profile', env.$check(after));
-	},
-	function(env, after, id) {
-		logger.debug('Got '+id+' from redis');
-		if (null === id) {
-			after(false);
-		}
-		else {
-			env.$push(id);
-			after(true);
-		}
-	}
-).use_local_env(true);
-
-/**
- * Construct profile request method from its pieces
- */
-var profileRequest = new fl.Branch(
-	fetchProfileId,
-	new fl.Chain(
-		getDotaProfile,
-		publishDotaProfile
-	),
-	dummy
-).set_exception_handler(exceptionHandler);
-
-/**
- * Handle get profile requests that are queued in redis, respecting the rate limits
- */
-var recentProfileRequest = 0;
-function handleProfileRequests() {
-	var delta = Date.now() - recentProfileRequest;
-	if (delta < 5000) {
-		setTimeout(handleProfileRequest, 5000);
-		return;
-	}
-
-	logger.debug('Starting profile request handler');
-	var env = new fl.Environment();
-	recentProfileRequest = Date.now();
-	profileRequest.call(null, env, null);
+function createRedisQueueHandler(fn, listName) {
+	return new fl.Branch(
+		new fl.Chain(
+			function(env, after) {
+				redisClients.pub.llen(listName, env.$check(after));
+			},
+			function(env, after, length) {
+				env.rerun = length > 1;
+				redisClients.pub.rpop(listName, env.$check(after));
+			},
+			function(env, after, data) {
+				if (null == data) {
+					after(false);
+				}
+				else {
+					env.$push(data);
+					after(true);
+				}
+			}
+		),
+		fn,
+		dummy
+	).set_exception_handler(exceptionHandler);
 }
+
+/**
+ * Create a function that will wrap a chain-style callable with a rate limit
+ * @param[in] Chain fn that will be called
+ * @param[in] interval The minimum time between two successive calls of this handler
+ * @return A plain function that can be used to initiate calls to the handler
+ */
+function createRateLimitedHandler(fn, interval) {
+	var meta = {
+		lastTime : Date.now(),
+		interval : interval
+	};
+
+	var env = new fl.Environment({
+		rerun : false
+	});
+
+	var chain = new fl.Branch(
+		function(env, after) {
+			var delta = Date.now() - meta.lastTime;
+			logger.debug('Handler time delta: '+delta);
+			logger.debug('Interval is: '+meta.interval);
+			after(delta > meta.interval);
+		},
+		new fl.Chain(
+			function(env, after) {
+				meta.lastTime = Date.now();
+				after();
+			},
+			fn
+		),
+		function(env, after) {
+			setTimeout(wrapper, interval - (Date.now() - meta.lastTime) + 1);
+			after();
+		}
+	);
+
+	function wrapper() {
+		chain.call(null, env, function() {
+			if (env.rerun) {
+				wrapper();
+			}
+		});
+	}
+
+	return wrapper;
+}
+
+// Handlers for different commands
+var handleProfileRequests = createRateLimitedHandler(
+	createRedisQueueHandler(
+		new fl.Chain(
+			getDotaProfile,
+			publishDotaProfile
+		),
+		'dota_cmds_get_profile'
+	),
+	5000);
+
+//var handleRecentHistoryRequest = createRateLimitedHandler(recentHistoryRequest, 5000);
 
 /**
  * Subscribe to command channels on redis
