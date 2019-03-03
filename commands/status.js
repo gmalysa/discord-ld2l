@@ -78,7 +78,7 @@ var getStatus = new fl.Chain(
 		var description = '';
 		var dota_age = Date.now() - parseInt(status[0]);
 
-		if (getComponentStatus()) {
+		if (getComponentStatus(dota_age)) {
 			description = sprintf(
 				'Dota Component: %s\nSteam Connection: %s\nDota Game Coordinator: %s',
 				getComponentStatusString(dota_age),
