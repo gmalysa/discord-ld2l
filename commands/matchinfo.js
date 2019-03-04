@@ -3,6 +3,7 @@
  */
 
 const _ = require('underscore');
+const cached = require('../lib/cached.js');
 const dotaconstants = require('dotaconstants');
 const fl = require('flux-link');
 const logger = require('../logger.js');
@@ -95,48 +96,6 @@ function makePlayerTable(players, names) {
 }
 
 /**
- * Convert account IDs into user names (no registered accounts yet)
- */
-var getNamesForAccounts = new fl.Chain(
-	function(env, after, ids) {
-		env.ids = ids;
-		env.clients.redis.mget(ids.map(id => 'steam_name_'+id), env.$check(after));
-	},
-	function(env, after, response) {
-		env.result = _.object(_.zip(env.ids, response));
-
-		var missing = [];
-		_.each(env.result, function(v, k) {
-			if (null == v) {
-				env.result[k] = 'Unknown';
-				missing.push(k);
-			}
-		});
-
-		after(missing);
-	},
-	steamAPI.getNamesForAccounts,
-	function(env, after, found) {
-		_.each(found, function(p, id) {
-			env.result[id] = p;
-		});
-
-		var keys = _.keys(env.result).map(v => 'steam_name_'+v);
-		var values = _.values(env.result);
-		env.redis_keys = keys;
-		env.clients.redis.mset(_.flatten(_.zip(keys, values)), env.$check(after));
-	},
-	function(env, after) {
-		var cmd = env.clients.redis.multi();
-		env.redis_keys.forEach(function(v) {
-			cmd.expire(v, 24*3600);
-		});
-		cmd.exec(); // ignore result
-		after(env.result);
-	}
-).use_local_env(true);
-
-/**
  * Gets match details from dota api
  * @param[in] id match id is required for steam.getMatchDetails
  */
@@ -148,7 +107,7 @@ var getMatchDetails = new fl.Chain(
 
 		after(players);
 	},
-	getNamesForAccounts,
+	cached.getNamesForAccounts,
 	function(env, after, players) {
 		var result = env.match.result;
 

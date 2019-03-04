@@ -25,7 +25,9 @@
     "sprintf-js": "^1.1.2",
     "spyglass": "*",
     "steam": "^1.4.0",
-    "underscore": "*"
+    "svg-radar-chart": "^0.2.2",
+    "underscore": "*",
+    "virtual-dom-stringify": "^3.0.1"
   },
   "devDependencies": {
     "commander": "^1.3.2"

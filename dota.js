@@ -40,14 +40,6 @@ logger.var_dump(steam.servers);
 function dummy(env, after) { after(); }
 
 /**
- * Sanitize objects that come from node-dota2 to remove stuff that isn't part of
- * the response that we want
- */
-function sanitize(obj) {
-	return _.omit(obj, '$type', 'toJSON', 'constructor');
-}
-
-/**
  * Exception handler for reporting errors in talking to the dota api
  */
 function exceptionHandler(env, err) {
@@ -127,6 +119,35 @@ setInterval(function() {
 }, 10*1000);
 
 /**
+ * Create a friendly list of featured hero information and strip stuff we don't want
+ * @param[in] CMsgProfileReponse profile Full profile object
+ * @return array Array of featured heroes reduced to a couple keys only
+ */
+function getFeaturedHeroes(profile) {
+	return _.map(profile.featured_heroes, function(hero) {
+		return {
+			hero_id : hero.hero_id,
+			plus_hero_xp : hero.plus_hero_xp,
+		};
+	});
+}
+
+/**
+ * Create a friendly list of successful heros, stripping stuff we don't want
+ * @param[in] CMsgProfileResponse profile Full profile object
+ * @return Array of featured heroes reduced to a couple keys only
+ */
+function getSuccessfulHeroes(profile) {
+	return _.map(profile.successful_heroes, function(hero) {
+		return {
+			hero_id : hero.hero_id,
+			win_percent : hero.win_percent,
+			longest_streak : hero.longest_streak
+		};
+	});
+}
+
+/**
  * Fetch dota profile data directly from GC, rate limiting isn't applied here
  * @param[in] id The account ID to fetch profile information for
  * @return Composition of profile, profile card, and player stats responses
@@ -139,22 +160,31 @@ var getDotaProfile = new fl.Chain(
 		dotaClient.requestProfile(env.accountId, env.$check(after));
 	},
 	function(env, after, profile) {
-		env.profile = sanitize(profile);
+		env.profile = profile;
 		dotaClient.requestProfileCard(env.accountId, env.$check(after));
 	},
 	function(env, after, profileCard) {
-		env.profileCard = sanitize(profileCard);
+		env.profileCard = profileCard;
 		dotaClient.requestPlayerStats(env.accountId, env.$check(after));
 	},
 	function(env, after, playerStats) {
-		env.playerStats = sanitize(playerStats);
-
-		var result = _.extend(
-			{account_id : env.accountId},
-			{profile : env.profile},
-			{profileCard : env.profileCard},
-			{stats : env.playerStats}
-		);
+		// Manually select the bits we want to keep
+		var result = {
+			account_id : env.accountId,
+			rank_tier : env.profileCard.rank_tier,
+			previous_rank_tier : env.profileCard.previous_rank_tier,
+			is_plus_subscriber : env.profileCard.is_plus_subscriber,
+			featured_heroes : getFeaturedHeroes(env.profile),
+			successful_heroes : getSuccessfulHeroes(env.profile),
+			mean_gpm : playerStats.mean_gpm,
+			mean_xppm : playerStats.mean_xppm,
+			mean_lasthits : playerStats.mean_lasthits,
+			fight_score : playerStats.fight_score,
+			farm_score : playerStats.farm_score,
+			support_score : playerStats.support_score,
+			push_score : playerStats.push_score,
+			versatility_score : playerStats.versatility_score
+		};
 		after(result);
 	}
 ).use_local_env(true);
