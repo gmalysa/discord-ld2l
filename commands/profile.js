@@ -37,45 +37,50 @@ const util = require('../util.js');
 //	var attachment = new Discord.Attachment(Buffer.from(svg));
 //	env.message.channel.send(attachment);
 
-// Amount of XP needed to reach the next level (in total)
-const dotaplus_levels = [
-	0,
+// Amount of XP needed to reach the next level from the current level
+const dotaplus_intervals = [
+	50,
+	300,
+	400,
 	500,
+	600,
+	900,
+	1000,
+	1100,
+	1200,
+	1300,
+	1400,
+	1700,
+	1800,
+	1900,
+	2000,
+	2100,
+	2200,
+	2500,
+	2600,
+	2700,
+	2800,
+	2900,
 	3000,
-	4000,
-	5000,
-	6000,
-	9000,
-	10000,
-	11000,
-	12000,
-	13000,
-	14000,
-	17000,
-	18000,
-	19000,
-	20000,
-	21000,
-	22000,
-	25000,
-	26000,
-	27000,
-	28000,
-	29000,
-	30000,
-	31000,
-	68000
+	3100,
+	6800
 ];
+
+var cumsum = 0;
+const dotaplus_thresholds = _.map(dotaplus_intervals, function(xp) {
+	cumsum += xp;
+	return cumsum;
+});
 
 /**
  * Find the level for a hero based on the xp given
  */
 function getDotaplusLevel(xp) {
-	var index = _.findIndex(dotaplus_levels, function(threshold) {
-		return xp <= threshold;
+	var index = _.findIndex(dotaplus_thresholds, function(threshold) {
+		return xp < threshold;
 	});
 
-	// Not sure if xp goes above master tier threshold or caps
+	// Above the final amount indicates master tier
 	if (-1 == index)
 		return 25;
 
