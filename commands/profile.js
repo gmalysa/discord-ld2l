@@ -4,6 +4,7 @@
 
 const _ = require('underscore');
 const cached = require('../lib/cached.js');
+const constants = require('../redis_constants.js');
 const Discord = require('discord.js');
 const dotaconstants = require('dotaconstants');
 const fl = require('flux-link');
@@ -104,27 +105,71 @@ function getDotaplusTier(level) {
 }
 
 /**
+ * Respond to invalid command arguments
+ */
+function usage(env, err) {
+	env.message.reply(err.message);
+	logger.var_dump(err);
+	env.$catch();
+}
+
+/**
  * Obtain a user's profile and display the important bits
  * @todo The profile fetch needs to move to lib/cached
  */
 var profile = new fl.Chain(
-	function(env, after) {
-		if (!/^[0-9]+$/.test(env.words[1])) {
-			// @todo error message
+	new fl.Branch(
+		function(env, after) {
+			logger.var_dump(env.words);
+			after(env.words.length > 1);
+		},
+		function(env, after) {
+			//	@todo match a member and get their profile instead
+			//var match = env.message.guild.members.
+		},
+		function(env, after) {
+			after(env.message.author.id);
+		}
+	),
+	function(env, after, discordid) {
+		logger.debug('Looking for profile for '+discordid);
+		env.filters.accounts.select({discordid : discordid}).exec(after, env.$throw);
+	},
+	function(env, after, results) {
+		logger.var_dump(results);
+		if (results.length == 0) {
+			env.$throw(new Error('You must link a profile with `--register`'));
 			return;
 		}
 
-		env.clients.redis.get('dota_profile_'+env.words[1], env.$check(after));
+		env.steamid = results[0].steamid;
+		env.clients.redis.get('dota_profile_'+results[0].steamid, env.$check(after));
 	},
 	function(env, after, profile) {
 		if (null === profile) {
-			// @todo queue up a profile request if we haven't seen one
-			env.message.channel.send('Profile not found');
-			return;
+			// Order a new profile read
+			env.clients.redis.publish(
+				'dota:command',
+				constants.DOTA_CMD.GET_PROFILE+','+env.steamid
+			);
+
+			// Listen for a response
+			env.clients.redisSub('dota:profile', env.steamid+'', function() {
+				env.clients.redis.get('dota_profile_'+env.steamid, env.$check(after));
+			});
 		}
-		after(profile);
+		else {
+			after(profile);
+		}
 	},
 	function(env, after, profile) {
+		if (null === profile) {
+			logger.debug('A profile was evicted from redis before we could read it');
+			env.$throw(
+				new Error('Your profile couldn\'t be loaded, try again later')
+			);
+			return;
+		}
 		env.profile = JSON.parse(profile);
 		after([env.profile.account_id]);
 	},
@@ -186,7 +231,9 @@ var profile = new fl.Chain(
 
 		after();
 	}
-).use_local_env(true);
+).use_local_env(true).set_exception_handler(usage);
+
+profile = util.addMySQL(profile);
 
 module.exports = function(commands) {
 	commands['profile'] = profile;

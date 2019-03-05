@@ -25,8 +25,39 @@ redisSub.on('error', function(err) {
 	logger.var_dump(err, 'redis sub');
 });
 
+redisSub.subscribe('dota:profile');
+
+// List of all things that are subscribed
+var subs = {};
+
+redisSub.on('message', function(channel, message) {
+	var sub = subs[channel];
+
+	if (undefined !== sub) {
+		var handlers = sub[message];
+		if (undefined !== handlers) {
+			delete sub[message];
+			handlers.forEach(process.nextTick);
+		}
+	}
+});
+
+/**
+ * Call the given function when a message matching this is received on the specified
+ * channel
+ */
+function subToStream(channel, message, fn) {
+	if (undefined === subs[channel])
+		subs[channel] = {};
+
+	if (undefined === subs[channel][message])
+		subs[channel][message] = [];
+
+	subs[channel][message].push(fn);
+}
+
 module.exports = {
 	redis : redisClient,
-	redisSub : redisSub,
+	redisSub : subToStream,
 	discord : discordClient,
 };
