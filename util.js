@@ -5,6 +5,7 @@
 const _ = require('underscore');
 const dotaconstants = require('dotaconstants');
 const fl = require('flux-link');
+const mysql = require('./mysql.js');
 
 module.exports = {
 	/**
@@ -21,6 +22,25 @@ module.exports = {
 		if (Array.isArray(list))
 			return list.join(join);
 		return list;
+	},
+
+	/**
+	 * Build a chain that has access to the mysql database with guaranteed resource
+	 * cleanup.
+	 */
+	addMySQL : function(fn) {
+		return new fl.Chain(
+			mysql.init_db,
+			fn,
+			mysql.cleanup_db
+		).set_exception_handler(function(env, err) {
+			logger.debug('Unhandled exception in mysql-enabled command');
+			logger.var_dump(err);
+
+			mysql.cleanup_db(env, function() {
+				env.$catch();
+			});
+		});
 	},
 
 	/**

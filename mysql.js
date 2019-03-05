@@ -13,6 +13,7 @@ require('colors');
 var _ = require('underscore');
 var mysql = require('mysql');
 var db = require('db-filters');
+var db_migrate = require('db-migrate');
 
 // Project modules
 var logger = require('./logger');
@@ -60,6 +61,35 @@ function init() {
 		initialized = true;
 		logger.module_init(mod_name, mod_version, 'Configured MySQL connection pool');
 		logger.info('Using database '+config.mysql.database.green.bold, mod_name);
+
+		// Load databse filter definitions
+		db.init(process.cwd() + '/filters', function(file) {
+			logger.info('Adding database definition ' + file.blue.bold + '...', 'db-filters');
+		}, db.l_info);
+
+		db.set_log(function(msg) {
+			logger.info(msg, 'db-filters');
+		});
+
+		// Check for and run database migrations
+		migrations = db_migrate.getInstance(true, {
+			config : {
+				dev : {
+					driver : 'mysql',
+					user : config.mysql.user,
+					password : config.mysql.password,
+					host : config.mysql.host,
+					database : config.mysql.database,
+					multipleStatements : true,
+				},
+				"sql-file" : true
+			}
+		});
+
+		migrations.up().then(function() {
+			logger.info('Finished running db migrations', 'db-migrate');
+		});
+
 	}
 }
 

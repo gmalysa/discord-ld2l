@@ -4,11 +4,14 @@ const config = require('./config.js');
 const fl = require('flux-link');
 const fs = require('fs');
 const logger = require('./logger.js');
+const mysql = require('./mysql.js');
 
 var clients = require('./clients.js');
 
 // List of things that can start commands
 const command_prefixes = ['--', '—', '––', '——'];
+
+mysql.init();
 
 // Populate commands from filesystem
 // Each command is expected to export a function that is called to add itself
