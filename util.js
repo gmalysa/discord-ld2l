@@ -23,6 +23,15 @@ module.exports = {
 	},
 
 	/**
+	 * Shared exception handler that is used for discord commands
+	 */
+	commandExceptionHandler : function(env, err) {
+		env.message.reply(err.message);
+		logger.var_dump(err);
+		env.$catch();
+	},
+
+	/**
 	 * Get a steam id for a discord id if this person has registered
 	 */
 	getSteamFromDiscord : new fl.Chain(

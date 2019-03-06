@@ -112,15 +112,6 @@ function getDotaplusTier(level) {
 }
 
 /**
- * Respond to invalid command arguments
- */
-function usage(env, err) {
-	env.message.reply(err.message);
-	logger.var_dump(err);
-	env.$catch();
-}
-
-/**
  * Obtain a user's profile and display the important bits
  */
 var profile = new fl.Chain(
@@ -200,7 +191,7 @@ var profile = new fl.Chain(
 
 		after();
 	}
-).use_local_env(true).set_exception_handler(usage);
+).use_local_env(true).set_exception_handler(util.commandExceptionHandler);
 
 profile = util.addMySQL(profile);
 
