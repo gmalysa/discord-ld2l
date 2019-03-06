@@ -7,9 +7,11 @@ const cached = require('../lib/cached.js');
 const constants = require('../redis_constants.js');
 const Discord = require('discord.js');
 const dotaconstants = require('dotaconstants');
+const dota = require('../lib/dota.js');
 const fl = require('flux-link');
 const logger = require('../logger.js');
 const sprintf = require('sprintf-js').sprintf;
+const strings = require('../lib/strings.js');
 const util = require('../util.js');
 
 // If we ever want to get radar charts of playstyle stats, combine this with imagemagick
@@ -143,47 +145,18 @@ var profile = new fl.Chain(
 	function(env, after, results) {
 		logger.var_dump(results);
 		if (results.length == 0) {
-			env.$throw(new Error('You must link a profile with `--register`'));
+			env.$throw(new Error(strings.PLEASE_REGISTER));
 			return;
 		}
 
-		env.steamid = results[0].steamid;
-		env.clients.redis.get('dota_profile_'+results[0].steamid, env.$check(after));
+		after(results[0].steamid);
 	},
+	cached.getDotaProfile,
 	function(env, after, profile) {
-		if (null === profile) {
-			// Order a new profile read
-			env.clients.redis.publish(
-				'dota:command',
-				constants.DOTA_CMD.GET_PROFILE+','+env.steamid
-			);
-
-			// Listen for a response
-			env.clients.redisSub('dota:profile', env.steamid+'', function() {
-				env.clients.redis.get('dota_profile_'+env.steamid, env.$check(after));
-			});
-		}
-		else {
-			after(profile);
-		}
-	},
-	function(env, after, profile) {
-		if (null === profile) {
-			logger.debug('A profile was evicted from redis before we could read it');
-			env.$throw(
-				new Error('Your profile couldn\'t be loaded, try again later')
-			);
-			return;
-		}
-		env.profile = JSON.parse(profile);
-		after([env.profile.account_id]);
-	},
-	cached.getNamesForAccounts,
-	function(env, after, names) {
-		var medal = 'http://ld2l.gg/static/images/medals/'+env.profile.rank_tier+'.png';
+		var medal = 'http://ld2l.gg/static/images/medals/'+profile.rank_tier+'.png';
 
 		// @todo get emotes for tier names
-		var featured = env.profile.featured_heroes.map(function(h) {
+		var featured = profile.featured_heroes.map(function(h) {
 			var level = getDotaplusLevel(h.plus_hero_xp);
 			var tier = getDotaplusTier(level);
 
@@ -195,7 +168,7 @@ var profile = new fl.Chain(
 			);
 		}).join('\n');
 
-		var best = env.profile.successful_heroes.map(function(h) {
+		var best = profile.successful_heroes.map(function(h) {
 			return sprintf(
 				'**%s**: %.1f%%, %d in a row',
 				dotaconstants.heroes[h.hero_id].localized_name,
@@ -207,24 +180,24 @@ var profile = new fl.Chain(
 		var recent = sprintf(
 			'GPM: %d\nXPM: %d\nFighting: %.2f\nFarming: %.2f\n' +
 			'Supporting: %.2f\nPushing: %.2f\nVersatility: %.2f',
-			env.profile.mean_gpm,
-			env.profile.mean_xppm,
-			env.profile.fight_score,
-			env.profile.farm_score,
-			env.profile.support_score,
-			env.profile.push_score,
-			env.profile.versatility_score
+			profile.mean_gpm,
+			profile.mean_xppm,
+			profile.fight_score,
+			profile.farm_score,
+			profile.support_score,
+			profile.push_score,
+			profile.versatility_score
 		);
 
 		var links = [
-			'[OD](https://www.opendota.com/players/'+env.profile.account_id+')',
-			'[DB](https://www.dotabuff.com/players/'+env.profile.account_id+')',
-			'[STRATZ](https://stratz.com/en-us/player/'+env.profile.account_id+')',
+			'[OD](https://www.opendota.com/players/'+profile.account_id+')',
+			'[DB](https://www.dotabuff.com/players/'+profile.account_id+')',
+			'[STRATZ](https://stratz.com/en-us/player/'+profile.account_id+')',
 		].join(' / ');
 
 		var embed = new Discord.RichEmbed()
-			.setTitle(names[env.profile.account_id])
-			.setURL('https://www.dotabuff.com/players/'+env.profile.account_id)
+			.setTitle(profile.name)
+			.setURL('https://www.dotabuff.com/players/'+profile.account_id)
 			.setThumbnail(medal)
 			.addField('Featured Heroes', featured, true)
 			.addField('Best Heroes', best, true)
