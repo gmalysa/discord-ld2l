@@ -5,7 +5,9 @@
 const _ = require('underscore');
 const dotaconstants = require('dotaconstants');
 const fl = require('flux-link');
+const logger = require('./logger.js');
 const mysql = require('./mysql.js');
+const strings = require('./lib/strings.js');
 
 module.exports = {
 	/**
@@ -19,7 +21,25 @@ module.exports = {
 
 		return fl.mkfn(eater, n);
 	},
-	
+
+	/**
+	 * Get a steam id for a discord id if this person has registered
+	 */
+	getSteamFromDiscord : new fl.Chain(
+		function(env, after, discordid) {
+			env.filters.accounts.select({discordid : discordid})
+				.exec(after, env.$throw);
+		},
+		function(env, after, results) {
+			if (results.length == 0) {
+				env.$throw(new Error(strings.PLEASE_REGISTER));
+				return;
+			}
+
+			after(results[0].steamid);
+		}
+	),
+
 	/**
 	 * Escape characters that would enter or end a formatting mode or backslashes
 	 */

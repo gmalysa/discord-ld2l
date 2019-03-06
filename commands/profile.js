@@ -122,12 +122,10 @@ function usage(env, err) {
 
 /**
  * Obtain a user's profile and display the important bits
- * @todo The profile fetch needs to move to lib/cached
  */
 var profile = new fl.Chain(
 	new fl.Branch(
 		function(env, after) {
-			logger.var_dump(env.words);
 			after(env.words.length > 1);
 		},
 		function(env, after) {
@@ -138,19 +136,7 @@ var profile = new fl.Chain(
 			after(env.message.author.id);
 		}
 	),
-	function(env, after, discordid) {
-		logger.debug('Looking for profile for '+discordid);
-		env.filters.accounts.select({discordid : discordid}).exec(after, env.$throw);
-	},
-	function(env, after, results) {
-		logger.var_dump(results);
-		if (results.length == 0) {
-			env.$throw(new Error(strings.PLEASE_REGISTER));
-			return;
-		}
-
-		after(results[0].steamid);
-	},
+	util.getSteamFromDiscord,
 	cached.getDotaProfile,
 	function(env, after, profile) {
 		var medal = 'http://ld2l.gg/static/images/medals/'+profile.rank_tier+'.png';
