@@ -229,6 +229,32 @@ var publishDotaProfile = new fl.Chain(
 ).use_local_env(true);
 
 /**
+ * Fetch a person's last played match
+ * @param[in] id 32 bit steam id to fetch the last match for
+ */
+var getLastMatch = new fl.Chain(
+	continueIfConnected,
+	function(env, after, id) {
+		env.account_id = parseInt(id);
+		redisClients.pub.hincrby('stats', 'dota_lastmatch', 1);
+		dotaClient.requestPlayerMatchHistory(env.account_id, {}, env.$check(after));
+	},
+	function(env, after, history) {
+		redisClients.pub.multi()
+			.set(
+				'dota_lastmatch_'+env.account_id,
+				history.matches[0].match_id.toString()
+			)
+			.expire('dota_lastmatch_'+env.account_id, 24*3600)
+			.exec(env.$check(after));
+	},
+	function(env, after) {
+		redisClients.pub.publish('dota:lastmatch', env.account_id);
+		after();
+	}
+).use_local_env(true);
+
+/**
  * Create a handler that works by popping a single value from a command queue in
  * redis and also re-calling itself if the queue is not empty after it finishes
  * @param[in] fn The function to call with the queue data
@@ -328,6 +354,14 @@ var handleProfileRequests = createRateLimitedHandler(
 
 //var handleRecentHistoryRequest = createRateLimitedHandler(recentHistoryRequest, 5000);
 
+var handleLastMatch = createRateLimitedHandler(
+	createRedisQueueHandler(
+		getLastMatch,
+		'dota_cmds_get_lastmatch'
+	),
+	1000
+);
+
 /**
  * Subscribe to command channels on redis
  */
@@ -348,6 +382,10 @@ redisClients.sub.on('message', function(channel, message) {
 		case constants.DOTA_CMD.GET_MATCH:
 			redisClients.pub.lpush('dota_cmds_get_match', arg);
 			break;
+		case constants.DOTA_CMD.GET_LASTMATCH:
+			redisClients.pub.lpush('dota_cmds_get_lastmatch', arg, function() {
+				handleLastMatch();
+			});
 		default:
 			logger.debug('Received unknown command: '+cmd);
 	}

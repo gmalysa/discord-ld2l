@@ -17,5 +17,6 @@ module.exports = {
 		GET_PROFILE : 0,
 		GET_RECENT_MATCHES : 1,
 		GET_MATCH : 2,
+		GET_LASTMATCH : 3
 	}
 };
