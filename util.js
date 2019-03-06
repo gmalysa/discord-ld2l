@@ -9,6 +9,18 @@ const mysql = require('./mysql.js');
 
 module.exports = {
 	/**
+	 * Eat # of arguments from the stack, for handling redis functions that
+	 * produce values we don't care about while constructing stuff
+	 */
+	eat : function(n) {
+		var eater = function(env, after) {
+			after();
+		};
+
+		return fl.mkfn(eater, n);
+	},
+	
+	/**
 	 * Escape characters that would enter or end a formatting mode or backslashes
 	 */
 	discordEscape : function(name) {

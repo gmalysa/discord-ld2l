@@ -203,7 +203,12 @@ var profile = new fl.Chain(
 			.addField('Best Heroes', best, true)
 			.addBlankField()
 			.addField('Recent Stats', recent, true)
-			.addField('Links', links, true)
+			.addField('Links', links, true);
+
+		if (profile.fetched_on) {
+			embed.setFooter('Retrieved on '+(new Date(profile.fetched_on)).toLocaleString('en-US',
+				{timeZone : 'America/Chicago'}));
+		}
 
 		env.message.channel.send(embed);
 

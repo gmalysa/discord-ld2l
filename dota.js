@@ -20,6 +20,7 @@ const dotaClient = new dota2.Dota2Client(steamClient, true);
 
 const redis = require('redis');
 const constants = require('./redis_constants.js');
+const util = require('./util.js');
 
 var redisClients = {
 	pub : redis.createClient(),		// publish new data here
@@ -45,7 +46,7 @@ function dummy(env, after) { after(); }
 function exceptionHandler(env, err) {
 	logger.debug('Exception caught while talking to a service');
 	logger.var_dump(err);
-	err.$catch();
+	env.$catch();
 }
 
 /**
@@ -148,11 +149,27 @@ function getSuccessfulHeroes(profile) {
 }
 
 /**
+ * Verify that the dota connection is valid or abort the chain
+ */
+var continueIfConnected = new fl.Chain(
+	function(env, after) {
+		if (!dotaClient._gcReady) {
+			env.$throw(new Error('GC not connected'));
+			return;
+		}
+		else {
+			after();
+		}
+	}
+);
+
+/**
  * Fetch dota profile data directly from GC, rate limiting isn't applied here
  * @param[in] id The account ID to fetch profile information for
  * @return Composition of profile, profile card, and player stats responses
  */
 var getDotaProfile = new fl.Chain(
+	continueIfConnected,
 	function(env, after, id) {
 		env.accountId = parseInt(id);
 		logger.debug('Requesting profile for '+id);
@@ -171,6 +188,7 @@ var getDotaProfile = new fl.Chain(
 		// Manually select the bits we want to keep
 		var result = {
 			account_id : env.accountId,
+			fetched_on : Date.now(),
 			rank_tier : env.profileCard.rank_tier,
 			previous_rank_tier : env.profileCard.previous_rank_tier,
 			is_plus_subscriber : env.profileCard.is_plus_subscriber,
@@ -236,7 +254,16 @@ function createRedisQueueHandler(fn, listName) {
 				}
 			}
 		),
-		fn,
+		new fl.Chain(
+			// Remove duplicates from the command list
+			function(env, after, data) {
+				env.$push(data);
+				redisClients.pub.lrem(listName, 0, data, env.$check(after));
+			},
+			// lrem pushes a result to the stack we want to drop
+			util.eat(1),
+			fn
+		),
 		dummy
 	).set_exception_handler(exceptionHandler);
 }
