@@ -25,7 +25,12 @@ redisSub.on('error', function(err) {
 	logger.var_dump(err, 'redis sub');
 });
 
+// @todo: make these subscriptions be added automatically
 redisSub.subscribe('dota:profile');
+redisSub.subscribe('dota:lastmatch');
+
+// @todo: reconsider how some of this works. this model works for the commands
+// thus far but some more general stuff like mm status need more nuance I think
 
 // List of all things that are subscribed
 var subs = {};
