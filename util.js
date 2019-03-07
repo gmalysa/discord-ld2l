@@ -152,6 +152,45 @@ function sendMatchDetails(env, after, match) {
 	after();
 }
 
+/**
+ * Exception handler for wait message chains just cleans up the wait message and
+ * then re-throws the exception
+ */
+function waitMessageError(env, err) {
+	if (env.wait_message) {
+		env.wait_message.delete();
+	}
+	env.$throw(err);
+}
+
+/**
+ * Create a chain that shows the given string while the given function is running
+ * and then automatically cleans it up. Also clean up the message in the event of
+ * an exception
+ * @param[in] msg Message to display while waiting for fn to finish
+ * @param[in] fn The function call while the message is displayed
+ * @return Chain-callable function
+ */
+function showWaitMessageWhile(msg, fn) {
+	return new fl.Chain(
+		function(env, after) {
+			env.wait_message = null;
+			env.message.channel.send(msg)
+				.then(after)
+				.catch(env.$throw)
+		},
+		function(env, after, message) {
+			env.wait_message = message;
+			after();
+		},
+		fn,
+		function(env, after) {
+			env.wait_message.delete();
+			after();
+		}
+	).set_exception_handler(waitMessageError);
+}
+
 module.exports = {
 	/**
 	 * Eat # of arguments from the stack, for handling redis functions that
@@ -275,4 +314,5 @@ module.exports = {
 
 	discordEscape : discordEscape,
 	sendMatchDetails : sendMatchDetails,
+	showWaitMessageWhile : showWaitMessageWhile,
 };
