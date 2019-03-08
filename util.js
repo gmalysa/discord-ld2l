@@ -120,7 +120,7 @@ function sendMatchDetails(env, after, match) {
 	var durationSec = match.duration - durationMin*60;
 
 	var details = sprintf(
-		'%s **%s** Victory: %d-%d | **%s** %s (%d:%d) | %s',
+		'%s **%s** Victory: %d-%d | **%s** %s (%d:%02d) | %s',
 		winnerEmote,
 		winnerName,
 		match.radiant_score,
