@@ -14,6 +14,7 @@ var redisSub = redis.createClient();
 
 // Maybe do something better about these in the future
 discordClient.on('error', function(err) {
+	console.log(err);
 	logger.var_dump(err, 'discord');
 });
 

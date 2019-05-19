@@ -16,7 +16,7 @@
     "db-migrate-mysql": "^1.1.10",
     "discord.js": "^11.4.2",
     "dota2": "github:Arcana/node-dota2",
-    "dotaconstants": "^6.16.0",
+    "dotaconstants": "^6.17.0",
     "flux-link": "github:gmalysa/flux-link",
     "mysql": "2.15.0",
     "randomstring": "^1.1.5",
@@ -24,7 +24,7 @@
     "request": "^2.83.0",
     "sprintf-js": "^1.1.2",
     "spyglass": "*",
-    "steam": "^1.4.0",
+    "steam": "^1.4.1",
     "svg-radar-chart": "^0.2.2",
     "underscore": "*",
     "virtual-dom-stringify": "^3.0.1"

@@ -136,7 +136,7 @@ function sendMatchDetails(env, after, match) {
 		'OD: <https://www.opendota.com/matches/%d>\n' +
 		'DB: <https://www.dotabuff.com/matches/%d>',
 		match.match_id,
-		match.match_id,
+		match.match_id
 	);
 
 	var text = [

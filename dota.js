@@ -306,10 +306,6 @@ function createRateLimitedHandler(fn, interval) {
 		interval : interval
 	};
 
-	var env = new fl.Environment({
-		rerun : false
-	});
-
 	var chain = new fl.Branch(
 		function(env, after) {
 			var delta = Date.now() - meta.lastTime;
@@ -331,6 +327,10 @@ function createRateLimitedHandler(fn, interval) {
 	);
 
 	function wrapper() {
+		var env = new fl.Environment({
+			rerun : false
+		});
+
 		chain.call(null, env, function() {
 			if (env.rerun) {
 				wrapper();
