@@ -162,7 +162,7 @@ var hero = new fl.Chain(
 
 		env.message.channel.send(embed);
 		after();
-	},
+	}
 ).use_local_env(true);
 
 module.exports = function(commands) {
