@@ -111,22 +111,24 @@ function getDotaplusTier(level) {
 	return 'Master';
 }
 
+const prepositions = [
+	util.commandPrepositionOf,
+];
+
 /**
  * Obtain a user's profile and display the important bits
  */
 var profile = new fl.Chain(
-	new fl.Branch(
-		function(env, after) {
-			after(env.words.length > 1);
-		},
-		function(env, after) {
-			//	@todo match a member and get their profile instead
-			//var match = env.message.guild.members.
-		},
-		function(env, after) {
+	function(env, after) {
+		after(prepositions);
+	},
+	util.checkCommandPrepositions,
+	function(env, after) {
+		if (env.of)
+			after(env.of);
+		else
 			after(env.message.author.id);
-		}
-	),
+	},
 	util.getSteamFromDiscord,
 	cached.getDotaProfile,
 	function(env, after, profile) {

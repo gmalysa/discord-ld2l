@@ -8,22 +8,25 @@ const fl = require('flux-link');
 const logger = require('../logger.js');
 const util = require('../util.js');
 
+const prepositions = [
+	util.commandPrepositionAs,
+	util.commandPrepositionOf,
+];
+
 /**
  * Get a user's most recently played match and display the score screen
  */
 var lastmatch = new fl.Chain(
-	new fl.Branch(
-		function(env, after) {
-			after(env.words.length > 1);
-		},
-		function(env, after) {
-			//	@todo match a member and get their profile instead
-			//var match = env.message.guild.members.
-		},
-		function(env, after) {
+	function(env, after) {
+		after(prepositions);
+	},
+	util.checkCommandPrepositions,
+	function(env, after) {
+		if (env.of)
+			after(env.of);
+		else
 			after(env.message.author.id);
-		}
-	),
+	},
 	util.getSteamFromDiscord,
 	cached.getLastMatch,
 	util.sendMatchDetails

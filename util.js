@@ -45,6 +45,15 @@ var lobbyTypes = {
 };
 
 /**
+ * List of prepositions that introduce command modifier words
+ */
+const prepositions = [
+	'of',
+	'in',
+	'as',
+];
+
+/**
  * To translate game mode to text label, handles game modes that aren't
  * included in the table yet/ever
  */
@@ -191,18 +200,94 @@ function showWaitMessageWhile(msg, fn) {
 	).set_exception_handler(waitMessageError);
 }
 
-module.exports = {
-	/**
-	 * Eat # of arguments from the stack, for handling redis functions that
-	 * produce values we don't care about while constructing stuff
-	 */
-	eat : function(n) {
-		var eater = function(env, after) {
-			after();
-		};
+/**
+ * Eat # of arguments from the stack, for handling redis functions that
+ * produce values we don't care about while constructing stuff
+ */
+function eat(n) {
+	var eater = function(env, after) {
+		after();
+	};
 
-		return fl.mkfn(eater, n);
-	},
+	return fl.mkfn(eater, n);
+}
+
+
+/**
+ * Find a hero match by name
+ */
+const dotaHeroSearch = new fl.Chain(
+	function(env, after, testName) {
+		var testLC = testName.toLowerCase();
+		var testLCinternal = testLC.replace(' ', '_');
+
+		var matches = _.filter(dotaconstants.heroes, function(hero) {
+			if (hero.localized_name.toLowerCase().includes(testLC))
+				return true;
+
+			if (hero.name.includes(testLCinternal))
+				return true;
+
+			return false;
+		});
+
+		// @todo use string-similarity for a fallback match
+
+		after(matches);
+	}
+);
+
+/**
+ * Get preposition args, expected to follow a preposition located at words[1]
+ * @return false if no args, otherwise returns a single string of args
+ */
+function getPrepositionArgs(env) {
+	// Find words to the end of the list or the next preposition
+	var term = 2;
+	for (var i = 2; i < env.words.length; ++i) {
+		// Make sure term = list length-1 if we don't get a match
+		term = i;
+		if (prepositions.includes(env.words[i])) {
+			break;
+		}
+	}
+
+	// Remove everything we used to match, from 1 through term
+	// which is incidentally also term-count items
+	var words = env.words.splice(1, term);
+	if (words.length < 1)
+		return false;
+
+	return words.slice(1).join(' ');
+}
+
+/**
+ * Build a header for a prepositional command that matches the word and strips
+ * arguments, then stores them in the given field
+ * @param[in] word Preposition to search for
+ * @param[in] field Environment field to store the matching argument in if found
+ * @return chain-callable function
+ */
+function buildPrepositionCommand(word, field) {
+	return function(env, after) {
+		if (env.words[1] && env.words[1].toLowerCase() != word) {
+			after(false);
+			return;
+		}
+
+		env[field] = getPrepositionArgs(env);
+		if (!env[field]) {
+			after(false);
+			return;
+		}
+
+		env.$push(env[field]);
+		after(true);
+	};
+}
+
+module.exports = {
+	eat : eat,
 
 	/**
 	 * Shared exception handler that is used for discord commands
@@ -288,28 +373,126 @@ module.exports = {
 		);
 	},
 
+	dotaHeroSearch : dotaHeroSearch,
+
 	/**
-	 * Find a hero match by name
+	 * Check for potential "as X" starting at words[1] (words[0] = command name)
+	 * and consume tokens
+	 * @return true if a match was made, false if not
+	 * @return[env.as] hero object to look for
 	 */
-	dotaHeroSearch : new fl.Chain(
-		function(env, after, testName) {
-			var testLC = testName.toLowerCase();
-			var testLCinternal = testLC.replace(' ', '_');
-
-			var matches = _.filter(dotaconstants.heroes, function(hero) {
-				if (hero.localized_name.toLowerCase().includes(testLC))
-					return true;
-
-				if (hero.name.includes(testLCinternal))
-					return true;
-
-				return false;
-			});
-
-			// @todo use string-similarity for a fallback match
-
-			after(matches);
+	commandPrepositionAs : new fl.Branch(
+		buildPrepositionCommand('as', 'as_search'),
+		new fl.Chain(
+			dotaHeroSearch,
+			function(env, after, matches) {
+				if (matches.length > 0) {
+					env.as = matches[0];
+					after(true);
+				}
+				else {
+					env.$throw(new Error(
+						sprintf(strings.MATCH_AS_FAILED, env.as_search)
+					));
+				}
+			}
+		),
+		function(env, after) {
+			after(false);
 		}
+	),
+
+	/**
+	 * Check for a potential "of X" starting at words[1] and consume tokens
+	 * @return true if a match was found, false if not
+	 * @return[env.of] discord account id of matching user
+	 */
+	commandPrepositionOf : new fl.Branch(
+		buildPrepositionCommand('of', 'of_search'),
+		new fl.Chain(
+			function(env, after, name) {
+				const mRegex = /<@([0-9]+)>/;
+
+				// If guild isn't ready yet, we can't search by person
+				if (!env.message.guild.available) {
+					logger.debug('Guild not ready to search by name yet');
+					after(false);
+					return;
+				}
+
+				// Check for direct mention
+				var isMention = mRegex.test(name);
+				if (isMention) {
+					var match = mRegex.exec(name);
+					env.of = match[1];
+					after(true);
+					return;
+				}
+
+				name = name.toLowerCase().trim();
+				var matches = env.message.guild.members.filter(
+					function(v) {
+						if (v.displayName.toLowerCase().includes(name)) {
+							return true;
+						}
+						if (v.user.username.toLowerCase().includes(name)) {
+							return true;
+						}
+					}
+				);
+
+				matches = matches.array();
+				if (matches.length > 0) {
+					env.of = matches[0].user.id;
+					after(true);
+				}
+				else {
+					after(false);
+				}
+			}
+		),
+		function(env, after) {
+			after(false);
+		}
+	),
+
+	/**
+	 * Given a list of prepositional commands, cycle through them in order
+	 * until no more matches are found. This kind of "iterate over runtime list
+	 * of callables" would be better suited as a flux link ability that we reuse
+	 * here and elsewhere
+	 */
+	checkCommandPrepositions : new fl.Chain(
+		function(env, after, prepositions) {
+			env.prepositions = prepositions;
+			env.loop = true;
+			after();
+		},
+		new fl.LoopChain(
+			function(env, after) {
+				after(env.loop);
+			},
+			new fl.Chain(
+				function(env, after) {
+					env.run_preps = env.prepositions.slice();
+					env.loop = false;
+					after();
+				},
+				new fl.LoopChain(
+					function(env, after) {
+						after(env.run_preps.length > 0);
+					},
+					function(env, after) {
+						var prep = env.run_preps.pop();
+						prep.call(null, env, after);
+					},
+					function(env, after, result) {
+						env.loop |= result;
+						after();
+					}
+				)
+			)
+		)
 	),
 
 	discordEscape : discordEscape,
